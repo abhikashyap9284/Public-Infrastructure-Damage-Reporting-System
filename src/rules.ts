@@ -1,0 +1,14 @@
+import {z} from 'zod';
+import type {Role,Status,Issue} from './types';
+export const emailSchema=z.string().trim().toLowerCase().email().max(254);
+export const passwordSchema=z.string().min(10,'Use at least 10 characters.').max(72,'Use at most 72 characters.').regex(/[a-z]/,'Add a lowercase letter.').regex(/[A-Z]/,'Add an uppercase letter.').regex(/[0-9]/,'Add a number.');
+export const registrationSchema=z.object({name:z.string().trim().min(2).max(80),email:emailSchema,password:passwordSchema,role:z.enum(['citizen','organization']),city:z.string().trim().min(2).max(80),organizationName:z.string().trim().max(120).optional()}).refine(x=>x.role!=='organization'||!!x.organizationName&&x.organizationName.length>=3,{message:'Enter your organization name.',path:['organizationName']});
+export const reportSchema=z.object({title:z.string().trim().min(8).max(140),description:z.string().trim().min(20).max(3000),category:z.enum(['roads','streetlights','water','footpaths','drainage','waste']),address:z.string().trim().min(5).max(240),city:z.string().trim().min(2).max(80),lat:z.number().min(-90).max(90),lng:z.number().min(-180).max(180),priority:z.enum(['low','normal','high','critical']),photo:z.string().min(30).max(1100000)});
+export function canTransition(role:Role,current:Status,next:Status,owner:boolean):boolean{
+ if(role==='citizen')return owner&&current==='resolved'&&next==='reopened';
+ const transitions:Record<Status,Status[]>={submitted:['in_progress','rejected'],assigned:['in_progress','rejected'],in_progress:['resolved','rejected'],resolved:['reopened'],rejected:[],reopened:['in_progress','rejected']};
+ return transitions[current].includes(next);
+}
+export function distanceMeters(a:{lat:number;lng:number},b:{lat:number;lng:number}){const r=Math.PI/180;const v=Math.sin((b.lat-a.lat)*r/2)**2+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin((b.lng-a.lng)*r/2)**2;return 6371000*2*Math.atan2(Math.sqrt(v),Math.sqrt(1-v));}
+export function stats(issues:Issue[]){const resolved=issues.filter(x=>x.status==='resolved');const ratings=resolved.map(x=>x.rating).filter((x):x is number=>!!x);return {total:issues.length,open:issues.filter(x=>!['resolved','rejected'].includes(x.status)).length,resolved:resolved.length,progress:issues.filter(x=>x.status==='in_progress').length,rate:issues.length?Math.round(resolved.length/issues.length*100):0,avgHours:resolved.length?Math.round(resolved.reduce((s,x)=>s+(new Date(x.resolvedAt||x.updatedAt).getTime()-new Date(x.createdAt).getTime())/3600000,0)/resolved.length):0,satisfaction:ratings.length?Math.round(ratings.reduce((a,b)=>a+b,0)/ratings.length*10)/10:0,reopened:issues.filter(x=>x.status==='reopened').length};}
+export function csvCell(v:unknown){const str=String(v??'');return '"'+(/^[=+@\-\t\r]/.test(str)?"'"+str:str).replaceAll('"','""')+'"';}

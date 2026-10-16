@@ -1,0 +1,12 @@
+import {neon} from '@neondatabase/serverless';
+import {hash} from 'bcryptjs';
+import {randomUUID} from 'node:crypto';
+const {DATABASE_URL,ADMIN_NAME,ADMIN_EMAIL,ADMIN_PASSWORD}=process.env;
+if(!DATABASE_URL||!ADMIN_NAME||!ADMIN_EMAIL||!ADMIN_PASSWORD)throw new Error('Set DATABASE_URL, ADMIN_NAME, ADMIN_EMAIL, ADMIN_PASSWORD in .env.local.');
+if(ADMIN_PASSWORD.length<10||Buffer.byteLength(ADMIN_PASSWORD)>72||!/[A-Z]/.test(ADMIN_PASSWORD)||!/[a-z]/.test(ADMIN_PASSWORD)||!/[0-9]/.test(ADMIN_PASSWORD))throw new Error('Use a password of 10+ characters with upper/lowercase and a number (maximum 72 UTF-8 bytes).');
+const sql=neon(DATABASE_URL);
+const existing=await sql`SELECT id FROM users WHERE email=${ADMIN_EMAIL.toLowerCase().trim()}`;
+if(existing.length)throw new Error('Email already exists. This command never promotes or overwrites an existing account.');
+const pass=await hash(ADMIN_PASSWORD,12);
+await sql`INSERT INTO users(id,full_name,email,password_hash,role,city) VALUES(${randomUUID()},${ADMIN_NAME},${ADMIN_EMAIL.toLowerCase().trim()},${pass},'admin','Noida')`;
+console.log('Admin account created. Sign in with the email and password you supplied. Remove ADMIN_PASSWORD from .env.local.');
